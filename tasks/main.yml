@@ -86,7 +86,6 @@
     line: "{{ item.split(':')[0].strip() }} {{ item.split(':')[1].strip() }}"
     state: present
   loop: "{{ lookup('ansible.builtin.template', 'redis.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
-  register: redis_conf_file
 
 - name: Update sentinel.conf
   ansible.builtin.lineinfile:
@@ -95,28 +94,16 @@
     line: "{{ item.split(':')[0].strip() }} {{ item.split(':')[1].strip() }}"
     state: present
   loop: "{{ lookup('ansible.builtin.template', 'sentinel.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
-  register: sentinel_conf_file
 
-# Restart services
+# Enable&restart services
 - name: restart redis-server
   ansible.builtin.systemd:
     name: redis-server
+    enabled: yes
     state: restarted
-  when: redis_conf_file is changed
 
 - name: restart redis-sentinel
   ansible.builtin.systemd:
     name: redis-sentinel
+    enabled: yes
     state: restarted
-  when: sentinel_conf_file is changed
-
-# Enable services
-- name: Make sure service redis-server is enabled
-  ansible.builtin.systemd:
-    name: redis-server
-    enabled: yes
-
-- name: Make sure service redis-sentinel is enabled
-  ansible.builtin.systemd:
-    name: redis-sentinel
-    enabled: yes
