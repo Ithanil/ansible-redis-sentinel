@@ -1,0 +1,31 @@
+- name: Determine and store main IPv4 address
+  ansible.builtin.set_fact:
+    main_ipv4: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"
+- name: Determine and store main IPv6 address (unless disabled)
+  ansible.builtin.set_fact:
+    main_ipv6: "{{ main_ansible_default_ipv6.address|default(ansible_all_ipv6_addresses[0]) }}"
+  when: not disable_ipv6|default(false)
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+- name: Install redis-server
+  apt:
+    name: redis-server
+    update_cache: yes
+- name: Install redis-sentinel
+  apt:
+    name: redis-sentinel
+- ansible.builtin.debug:
+    var: main_ipv4
+- ansible.builtin.debug:
+    var: main_ipv6
+- ansible.builtin.debug:
+    var: sentinel_hosts
+- name: Enable service redis-server
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: yes
+- name: Enable service redis-sentinel
+  ansible.builtin.systemd:
+    name: redis-sentinel
+    enabled: yes
