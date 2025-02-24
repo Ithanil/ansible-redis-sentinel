@@ -1,31 +1,122 @@
+# Check that we don't accidentally affect a running system
+- name: Check if redis-server service is already active (ignore the errors if not yet installed)
+  ansible.builtin.command: systemctl is-active redis-server
+  register: redis_status
+  changed_when: false
+  ignore_errors: true
+- name: Stopping, because redis-server service is already active. If this is expected, please stop the service on all hosts!
+  ansible.builtin.meta: end_play
+  when: redis_status.stdout|default('inactive') == 'active'
+
+- name: Check if redis-sentinel service is already active (ignore the errors if not yet installed)
+  ansible.builtin.command: systemctl is-active redis-sentinel
+  register: sentinel_status
+  changed_when: false
+  ignore_errors: true
+- name: Stopping, because redis-sentinel service is already active. If this is expected, please stop the service on all hosts!
+  ansible.builtin.meta: end_play
+  when: sentinel_status.stdout|default('inactive') == 'active'
+
+# Check & set facts
 - name: Determine and store main IPv4 address
   ansible.builtin.set_fact:
     main_ipv4: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"
+
 - name: Determine and store main IPv6 address (unless disabled)
   ansible.builtin.set_fact:
     main_ipv6: "{{ main_ansible_default_ipv6.address|default(ansible_all_ipv6_addresses[0]) }}"
-  when: not disable_ipv6|default(false)
+  when: not disable_ipv6
+
+- name: Ensure at least 3 redis sentinel hosts are specified
+  fail:
+    msg: "Array of sentinel hosts does not have at least 3 elements! Got: {{ sentinel_hosts }}"
+  when: sentinel_hosts | length < 3
+
+- name: Store an array of sentinel names (without own name)
+  set_fact:
+    other_sentinel_hosts: "{{ sentinel_hosts | reject('equalto', inventory_hostname) | list }}"
+
+- name: Ensure resulting array has exactly one element less than sentinel_hosts
+  fail:
+    msg: "Array of other sentinel hosts does not have one element less! Got: {{ other_sentinel_hosts }}"
+  when: other_sentinel_hosts | length != sentinel_hosts | length - 1
+
+- name: Set sentinel_role (first one in the list will be master)
+  ansible.builtin.set_fact:
+    sentinel_role: "{{ 'master' if inventory_hostname == sentinel_hosts[0] else 'slave' }}"
+
+# UFW rules
+- name: Allow Redis/Sentinel ports from other Sentinels (IPv4)
+  ufw:
+    rule: allow
+    proto: tcp
+    src: "{{ hostvars[item]['main_ipv4'] }}"
+    port: "{{ redis_port }},{{ sentinel_port }}"
+    comment: "{{ hostvars[item]['ansible_hostname'] }}"
+  loop: "{{ other_sentinel_hosts }}"
+
+- name: Allow Redis/Sentinel ports from other Sentinels (IPv6)
+  ufw:
+    rule: allow
+    proto: tcp
+    src: "{{ hostvars[item]['main_ipv6'] }}"
+    port: "{{ redis_port }},{{ sentinel_port }}"
+    comment: "{{ hostvars[item]['ansible_hostname'] }}"
+  loop: "{{ other_sentinel_hosts }}"
+  when: not disable_ipv6
+
+# Install packages
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: yes
+
 - name: Install redis-server
   apt:
     name: redis-server
-    update_cache: yes
+
 - name: Install redis-sentinel
   apt:
     name: redis-sentinel
-- ansible.builtin.debug:
-    var: main_ipv4
-- ansible.builtin.debug:
-    var: main_ipv6
-- ansible.builtin.debug:
-    var: sentinel_hosts
-- name: Enable service redis-server
+
+# Adjust configuration
+- name: Update redis.conf
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
+    line: "{{ item.split(':')[0].strip() }} {{ item.split(':')[1].strip() }}"
+    state: present
+  loop: "{{ lookup('ansible.builtin.template', 'redis.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
+  register: redis_conf_file
+
+- name: Update sentinel.conf
+  ansible.builtin.lineinfile:
+    path: /etc/redis/sentinel.conf
+    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
+    line: "{{ item.split(':')[0].strip() }} {{ item.split(':')[1].strip() }}"
+    state: present
+  loop: "{{ lookup('ansible.builtin.template', 'sentinel.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
+  register: sentinel_conf_file
+
+# Restart services
+- name: restart redis-server
+  ansible.builtin.systemd:
+    name: redis-server
+    state: restarted
+  when: redis_conf_file is changed
+
+- name: restart redis-sentinel
+  ansible.builtin.systemd:
+    name: redis-sentinel
+    state: restarted
+  when: sentinel_conf_file is changed
+
+# Enable services
+- name: Make sure service redis-server is enabled
   ansible.builtin.systemd:
     name: redis-server
     enabled: yes
-- name: Enable service redis-sentinel
+
+- name: Make sure service redis-sentinel is enabled
   ansible.builtin.systemd:
     name: redis-sentinel
     enabled: yes

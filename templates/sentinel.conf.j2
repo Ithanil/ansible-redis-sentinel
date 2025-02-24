@@ -1,0 +1,8 @@
+{% for host in vars['sentinel_hosts'] if hostvars[host]['sentinel_role'] == "master" %}
+protected-mode: no
+port: {{ sentinel_port }}
+sentinel monitor mymaster: {{ hostvars[host]['main_ipv4'] }} {{ redis_port}} {{ sentinel_quorum }}
+sentinel auth-pass mymaster: {{ redis_password }}
+sentinel down-after-milliseconds mymaster: 5000
+sentinel failover-timeout mymaster: 60000
+{% endfor %}

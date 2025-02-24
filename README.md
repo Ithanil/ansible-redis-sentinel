@@ -1,6 +1,8 @@
 # Redis Sentinel Role
 
+README WIP
 
+Kudos to https://github.com/quanhua92/ansible-redis-sentinel for the template stuff
 
 ## Getting started
 
