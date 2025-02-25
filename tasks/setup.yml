@@ -1,0 +1,91 @@
+# Check & set facts
+- name: Check if potentially vaulted redis_password can be accessed...
+  block:
+  - name: Check if potentially vaulted redis_password can be accessed...
+    ansible.builtin.set_fact:
+      redis_password: "{{ redis_password }}"
+  rescue:
+  - name: Couldn't access redis_password, check if you failed to provide a correct vault password.
+    ansible.builtin.meta: end_play
+  when: redis_password is defined
+
+- name: Determine and store main IPv4 address for Sentinel setup (if not using IPv6)
+  ansible.builtin.set_fact:
+    sentinel_ip: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"
+  when: not use_ipv6
+
+- name: Determine and store main IPv6 address for Sentinel setup
+  ansible.builtin.set_fact:
+    sentinel_ip: "{{ main_ansible_default_ipv6.address|default(ansible_all_ipv6_addresses[0]) }}"
+  when: use_ipv6
+
+- name: Ensure at least 3 redis sentinel hosts are specified
+  fail:
+    msg: "Array of sentinel hosts does not have at least 3 elements! Got: {{ sentinel_hosts }}"
+  when: sentinel_hosts | length < 3
+
+- name: Store an array of sentinel names (without own name)
+  ansible.builtin.set_fact:
+    other_sentinel_hosts: "{{ sentinel_hosts | reject('equalto', inventory_hostname) | list }}"
+
+- name: Ensure resulting array has exactly one element less than sentinel_hosts
+  fail:
+    msg: "Array of other sentinel hosts does not have one element less! Got: {{ other_sentinel_hosts }}"
+  when: other_sentinel_hosts | length != sentinel_hosts | length - 1
+
+- name: Set sentinel_role (first one in the list will be master)
+  ansible.builtin.set_fact:
+    sentinel_role: "{{ 'master' if inventory_hostname == sentinel_hosts[0] else 'slave' }}"
+
+# UFW rules
+- name: Allow Redis/Sentinel ports from other Sentinels
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    src: "{{ hostvars[item]['sentinel_ip'] }}"
+    port: "{{ redis_port }},{{ sentinel_port }}"
+    comment: "{{ hostvars[item]['ansible_hostname'] }}"
+  loop: "{{ other_sentinel_hosts }}"
+
+# Install packages
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Install redis-server
+  ansible.builtin.apt:
+    name: redis-server
+
+- name: Install redis-sentinel
+  ansible.builtin.apt:
+    name: redis-sentinel
+
+# Adjust configuration
+- name: Update redis.conf
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
+    line: "{{ item.split(':', 1)[0].strip() }} {{ item.split(':', 1)[1].strip() }}"
+    state: present
+  loop: "{{ lookup('ansible.builtin.template', 'redis.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
+
+- name: Update sentinel.conf
+  ansible.builtin.lineinfile:
+    path: /etc/redis/sentinel.conf
+    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
+    line: "{{ item.split(':', 1)[0].strip() }} {{ item.split(':', 1)[1].strip() }}"
+    state: present
+  loop: "{{ lookup('ansible.builtin.template', 'sentinel.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
+
+# Enable&restart services
+- name: restart redis-server
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: yes
+    state: restarted
+
+- name: restart redis-sentinel
+  ansible.builtin.systemd:
+    name: redis-sentinel
+    enabled: yes
+    state: restarted

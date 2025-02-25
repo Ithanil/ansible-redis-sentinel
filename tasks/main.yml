@@ -1,110 +1,28 @@
 # Check that we don't accidentally affect a running system
-- name: Check if redis-server service is already active (ignore the errors if not yet installed)
+- name: Check if redis-server service is already active (ignore errors when inactive/uninstalled)
   ansible.builtin.command: systemctl is-active redis-server
   register: redis_status
   changed_when: false
   ignore_errors: true
-- name: Stopping, because redis-server service is already active. If this is expected, please stop the service on all hosts!
-  ansible.builtin.meta: end_play
-  when: redis_status.stdout|default('inactive') == 'active'
 
-- name: Check if redis-sentinel service is already active (ignore the errors if not yet installed)
+- name: Check if redis-sentinel service is already active (ignore errors when inactive/uninstalled)
   ansible.builtin.command: systemctl is-active redis-sentinel
   register: sentinel_status
   changed_when: false
   ignore_errors: true
-- name: Stopping, because redis-sentinel service is already active. If this is expected, please stop the service on all hosts!
-  ansible.builtin.meta: end_play
-  when: sentinel_status.stdout|default('inactive') == 'active'
 
-# Check & set facts
-- name: Check if potentially vaulted redis_password can be accessed...
-  block:
-  - name: Check if potentially vaulted redis_password can be accessed...
-    ansible.builtin.set_fact:
-      redis_password: "{{ redis_password }}"
-  rescue:
-  - name: Couldn't access redis_password, check if you failed to provide a correct vault password.
-    ansible.builtin.meta: end_play
-  when: redis_password is defined
-
-- name: Determine and store main IPv4 address for Sentinel setup (if not using IPv6)
+# Process results
+- name: Determine if all hosts are ready to continue
   ansible.builtin.set_fact:
-    sentinel_ip: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"
-  when: not use_ipv6
+    skip_sentinel_setup: true
+  when: hostvars[item]['redis_status'].stdout|default('inactive') == 'active' and hostvars[item]['sentinel_status'].stdout|default('inactive') == 'active'
+  loop: "{{ sentinel_hosts }}"
 
-- name: Determine and store main IPv6 address for Sentinel setup
-  ansible.builtin.set_fact:
-    sentinel_ip: "{{ main_ansible_default_ipv6.address|default(ansible_all_ipv6_addresses[0]) }}"
-  when: use_ipv6
+- name: Print reason for stop
+  ansible.builtin.debug:
+    msg: "Stopping, because redis-server and/or redis-sentinel services are already active. If this is expected, please stop the services on all hosts!"
+  when: skip_sentinel_setup|default(false)
 
-- name: Ensure at least 3 redis sentinel hosts are specified
-  fail:
-    msg: "Array of sentinel hosts does not have at least 3 elements! Got: {{ sentinel_hosts }}"
-  when: sentinel_hosts | length < 3
-
-- name: Store an array of sentinel names (without own name)
-  ansible.builtin.set_fact:
-    other_sentinel_hosts: "{{ sentinel_hosts | reject('equalto', inventory_hostname) | list }}"
-
-- name: Ensure resulting array has exactly one element less than sentinel_hosts
-  fail:
-    msg: "Array of other sentinel hosts does not have one element less! Got: {{ other_sentinel_hosts }}"
-  when: other_sentinel_hosts | length != sentinel_hosts | length - 1
-
-- name: Set sentinel_role (first one in the list will be master)
-  ansible.builtin.set_fact:
-    sentinel_role: "{{ 'master' if inventory_hostname == sentinel_hosts[0] else 'slave' }}"
-
-# UFW rules
-- name: Allow Redis/Sentinel ports from other Sentinels
-  community.general.ufw:
-    rule: allow
-    proto: tcp
-    src: "{{ hostvars[item]['sentinel_ip'] }}"
-    port: "{{ redis_port }},{{ sentinel_port }}"
-    comment: "{{ hostvars[item]['ansible_hostname'] }}"
-  loop: "{{ other_sentinel_hosts }}"
-
-# Install packages
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: yes
-
-- name: Install redis-server
-  ansible.builtin.apt:
-    name: redis-server
-
-- name: Install redis-sentinel
-  ansible.builtin.apt:
-    name: redis-sentinel
-
-# Adjust configuration
-- name: Update redis.conf
-  ansible.builtin.lineinfile:
-    path: /etc/redis/redis.conf
-    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
-    line: "{{ item.split(':', 1)[0].strip() }} {{ item.split(':', 1)[1].strip() }}"
-    state: present
-  loop: "{{ lookup('ansible.builtin.template', 'redis.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
-
-- name: Update sentinel.conf
-  ansible.builtin.lineinfile:
-    path: /etc/redis/sentinel.conf
-    regexp: "^{{ item.split(':')[0].strip() | regex_escape() }}.*$"
-    line: "{{ item.split(':', 1)[0].strip() }} {{ item.split(':', 1)[1].strip() }}"
-    state: present
-  loop: "{{ lookup('ansible.builtin.template', 'sentinel.conf.j2').splitlines() | reject('match', '^$') | reject('match', '^#.*') | list }}"
-
-# Enable&restart services
-- name: restart redis-server
-  ansible.builtin.systemd:
-    name: redis-server
-    enabled: yes
-    state: restarted
-
-- name: restart redis-sentinel
-  ansible.builtin.systemd:
-    name: redis-sentinel
-    enabled: yes
-    state: restarted
+# Execute setup if services are inactive
+- include_tasks: setup.yml
+  when: not skip_sentinel_setup|default(false)
