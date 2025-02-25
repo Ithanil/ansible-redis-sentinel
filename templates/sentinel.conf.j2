@@ -2,7 +2,9 @@
 protected-mode: no
 port: {{ sentinel_port }}
 sentinel monitor mymaster: {{ hostvars[host]['sentinel_ip'] }} {{ redis_port}} {{ sentinel_quorum }}
+{% if redis_password %}
 sentinel auth-pass mymaster: {{ redis_password }}
+{% endif %}
 sentinel down-after-milliseconds mymaster: {{ down_after_milliseconds }}
 sentinel failover-timeout mymaster: {{ failover_timeout }}
 {% endfor %}

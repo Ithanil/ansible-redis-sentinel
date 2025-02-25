@@ -18,6 +18,16 @@
   when: sentinel_status.stdout|default('inactive') == 'active'
 
 # Check & set facts
+- name: Check if potentially vaulted redis_password can be accessed...
+  block:
+  - name: Check if potentially vaulted redis_password can be accessed...
+    ansible.builtin.set_fact:
+      redis_password: "{{ redis_password }}"
+  rescue:
+  - name: Couldn't access redis_password, check if you failed to provide a correct vault password.
+    ansible.builtin.meta: end_play
+  when: redis_password is defined
+
 - name: Determine and store main IPv4 address for Sentinel setup (if not using IPv6)
   ansible.builtin.set_fact:
     sentinel_ip: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"

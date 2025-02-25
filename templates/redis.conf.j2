@@ -1,6 +1,9 @@
+protected-mode: no
 port: {{ redis_port }}
+{% if redis_password %}
 requirepass: {{ redis_password }}
 masterauth: {{ redis_password }}
+{% endif %}
 {% if hostvars[inventory_hostname]['sentinel_role'] != "master" %}
 {% for host in vars['sentinel_hosts'] if hostvars[host]['sentinel_role'] == "master" %}
 replicaof: {{ hostvars[host]['sentinel_ip'] }} {{ redis_port }}

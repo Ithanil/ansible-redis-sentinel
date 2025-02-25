@@ -1,5 +1,5 @@
 use_ipv6: false
-redis_password: test
+redis_password:
 redis_port: 6379
 sentinel_port: 26379
 sentinel_quorum: 2
