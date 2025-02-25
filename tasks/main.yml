@@ -44,7 +44,7 @@
   when: sentinel_hosts | length < 3
 
 - name: Store an array of sentinel names (without own name)
-  set_fact:
+  ansible.builtin.set_fact:
     other_sentinel_hosts: "{{ sentinel_hosts | reject('equalto', inventory_hostname) | list }}"
 
 - name: Ensure resulting array has exactly one element less than sentinel_hosts
@@ -57,8 +57,8 @@
     sentinel_role: "{{ 'master' if inventory_hostname == sentinel_hosts[0] else 'slave' }}"
 
 # UFW rules
-- name: Allow Redis/Sentinel ports from other Sentinels (IPv4)
-  ufw:
+- name: Allow Redis/Sentinel ports from other Sentinels
+  community.general.ufw:
     rule: allow
     proto: tcp
     src: "{{ hostvars[item]['sentinel_ip'] }}"
@@ -72,11 +72,11 @@
     update_cache: yes
 
 - name: Install redis-server
-  apt:
+  ansible.builtin.apt:
     name: redis-server
 
 - name: Install redis-sentinel
-  apt:
+  ansible.builtin.apt:
     name: redis-sentinel
 
 # Adjust configuration
