@@ -1,5 +1,7 @@
 use_ipv6: false
+redis_password: test
 redis_port: 6379
 sentinel_port: 26379
 sentinel_quorum: 2
-redis_password: test
+down_after_milliseconds: 5000
+failover_timeout: 60000
