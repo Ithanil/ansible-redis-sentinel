@@ -1,0 +1,9 @@
+# UFW-allow clients according to dict redis_sentinel_clients (e.g { client1: ip1, client2: ip2 })
+- name: Allow Redis/Sentinel ports from specified clients
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    src: "{{ item.value }}"
+    port: "{{ redis_port }},{{ sentinel_port }}"
+    comment: "{{ item.key }}"
+  loop: "{{ redis_sentinel_clients | dict2items }}"
