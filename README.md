@@ -21,7 +21,7 @@ sentinel_hosts:
 ```
 Note that these names are meant to be the inventory names, not the hostnames necessarily.
 
-Furthermore, you should consider overriding some of the default variables in `defaults/main.yml`. Note that `use_ipv6` means to use IPv6 addresses *instead* of IPv4 addresses.
+Furthermore, you should consider overriding some of the default variables in `defaults/main.yml`. Note that `sentinel_use_ipv6` means to use IPv6 *instead* of IPv4 for communication between the sentinels.
 
 Please consider setting the `redis_password` variable, because this role will default to an unprotected Redis setup. Make sure your installation is sufficiently protected by the means of network isolation and firewalling.
 If you don't want to store the redis_password in plaintext in your ansible repository, consider using ansible-vault. You could vault a new password like so:

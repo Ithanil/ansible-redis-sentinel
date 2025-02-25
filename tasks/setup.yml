@@ -12,12 +12,12 @@
 - name: Determine and store main IPv4 address for Sentinel setup (if not using IPv6)
   ansible.builtin.set_fact:
     sentinel_ip: "{{ main_ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}"
-  when: not use_ipv6
+  when: not sentinel_use_ipv6
 
 - name: Determine and store main IPv6 address for Sentinel setup
   ansible.builtin.set_fact:
     sentinel_ip: "{{ main_ansible_default_ipv6.address|default(ansible_all_ipv6_addresses[0]) }}"
-  when: use_ipv6
+  when: sentinel_use_ipv6
 
 - name: Ensure at least 3 redis sentinel hosts are specified
   fail:
