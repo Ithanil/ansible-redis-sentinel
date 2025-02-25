@@ -1,4 +1,4 @@
-disable_ipv6: false
+use_ipv6: false
 redis_port: 6379
 sentinel_port: 26379
 sentinel_quorum: 2
