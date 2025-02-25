@@ -1,4 +1,5 @@
 protected-mode: no
+bind: * -::*
 port: {{ redis_port }}
 {% if redis_password %}
 requirepass: {{ redis_password }}
