@@ -5,3 +5,12 @@ sentinel_port: 26379
 sentinel_quorum: 2
 down_after_milliseconds: 5000
 failover_timeout: 60000
+
+# OPTIONAL INVENTORY VARIABLES
+
+# Dictionary that allows to sets the redis.conf
+# option "replica-priority" per host
+redis_replica_priorities: {}
+#  "host1": "100"
+#  "host2": "200"
+#  "host3": "0"

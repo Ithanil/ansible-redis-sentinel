@@ -5,6 +5,7 @@ port: {{ redis_port }}
 requirepass: {{ redis_password }}
 masterauth: {{ redis_password }}
 {% endif %}
+replica-priority:{{ hostvars[inventory_hostname]['redis_replica_priorities'][inventory_hostname]|default("100") }}
 {% if hostvars[inventory_hostname]['sentinel_role'] != "master" %}
 {% for host in vars['sentinel_hosts'] if hostvars[host]['sentinel_role'] == "master" %}
 replicaof: {{ hostvars[host]['sentinel_ip'] }} {{ redis_port }}
