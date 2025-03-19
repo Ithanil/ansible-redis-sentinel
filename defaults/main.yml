@@ -14,3 +14,9 @@ redis_replica_priorities: {}
 #  "host1": "100"
 #  "host2": "200"
 #  "host3": "0"
+
+# Dictionary of Redis clients and their IPs
+# UFW rules will be created accordingly
+redis_sentinel_clients: {}
+#  "client1": "10.0.0.1"
+#  "client2": "10.0.0.2"
